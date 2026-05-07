@@ -1,5 +1,5 @@
 # source functions.R
-setwd(dir = "C:/Users/tobia/Documents/GitHub/diversity-for-nutrition")
+setwd(dir = "C:/Users/tobia/Documents/diversity-for-nutrition")
 source("functions.R")
 
 # test values

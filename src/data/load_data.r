@@ -9,7 +9,7 @@ load_data <- function(DATA_FOLDER,
   log_step("n01 [load_data]", "Loading nutrition data...")
   
   # load nutrition data
-  nutr_dat <- safe_read_csv(file.path(DATA_FOLDER, "Tables", "D4N_species_nutrition_data.csv"))
+  nutr_dat <- safe_read_csv(file.path(DATA_FOLDER, "Tables", "D4N_species_nutrition_data_20260506.csv"))
   
   # get the species for which models were made
   j <- which(nutr_dat$incl_SDM == 1)

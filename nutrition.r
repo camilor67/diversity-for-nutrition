@@ -64,35 +64,52 @@ process_nutrition <- function(lon = NULL,
       DATA_FOLDER = DATA_FOLDER
     )
     # print(biome)
-
+    
     ##############################################################################
-    # 3. Load maps
+    # 3. Extract species that can be grown at selected location
+    ##############################################################################
+    species_extr <- extract_suitable_species_parquet(
+       lon = inputs$lon,
+       lat = inputs$lat,
+       SSP = inputs$SSP,
+       within_range = inputs$within_range
+    )
+    # print(species_extr)
+    
+    ##############################################################################
+    # 4. Get country and region
+    ##############################################################################
+    country <- coords2country(inputs$lon, inputs$lat)
+    region <- region_from_country(country)
+    
+    ##############################################################################
+    # Load maps
     ##############################################################################
     # Resolve country+region once (used by load_maps and the report payload).
     # SA/CA split is only applied in load_maps when SPLIT_MAPS_BY_REGION=TRUE.
-    country <- coords2country(inputs$lon, inputs$lat)
-    region <- region_from_country(country)
-
-    maps <- load_maps(
-      species_set = data$species_set,
-      DATA_FOLDER = DATA_FOLDER,
-      BUCKET_NAME = BUCKET_NAME,
-      within_range = inputs$within_range,
-      SSP = inputs$SSP,
-      biome = biome$biome_name,
-      region = region
-    )
-    # print(maps)
+    # country <- coords2country(inputs$lon, inputs$lat)
+    # region <- region_from_country(country)
+    # 
+    # maps <- load_maps(
+    #   species_set = data$species_set,
+    #   DATA_FOLDER = DATA_FOLDER,
+    #   BUCKET_NAME = BUCKET_NAME,
+    #   within_range = inputs$within_range,
+    #   SSP = inputs$SSP,
+    #   biome = biome$biome_name,
+    #   region = region
+    # )
+    # # print(maps)
 
     ##############################################################################
-    # 4. Extract species that can grow at selected site
+    # Extract species that can grow at selected site
     ##############################################################################
-    species_extr <- extract_suitable_species(
-      lon = inputs$lon,
-      lat = inputs$lat,
-      maps_present = maps$distr_stack,
-      maps_future = maps$distr_stack_future
-    )
+    # species_extr <- extract_suitable_species(
+    #   lon = inputs$lon,
+    #   lat = inputs$lat,
+    #   maps_present = maps$distr_stack,
+    #   maps_future = maps$distr_stack_future
+    # )
     # print(species_extr)
     
     ##############################################################################
