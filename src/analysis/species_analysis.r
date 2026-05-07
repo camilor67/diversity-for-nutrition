@@ -136,11 +136,15 @@ filter_species <- function(nutr_dat,
   
   log_step("n09 [species_analysis]", "Filtering species: growth forms...")
   
-  # select only the species with growth forms selected by the user
+  # select only the species with growth forms selected by the user.
+  # The CSV's growth_form may combine multiple sources with "/" (e.g. "shrub/tree"
+  # = some sources say shrub, others tree). Match if any token intersects the
+  # user's selection.
   if(length(growth_forms_ID) > 0 && growth_forms_ID[1] != 1) {
     m <- match(growth_forms_ID, growth_forms$ID)
     growth_forms_sel <- growth_forms$growth_form[m]
-    j <- which(nutr_dat$growth_form %in% growth_forms_sel)
+    row_tokens <- strsplit(nutr_dat$growth_form, "/", fixed = TRUE)
+    j <- which(vapply(row_tokens, function(toks) any(toks %in% growth_forms_sel), logical(1)))
     nutr_dat <- nutr_dat[j,]
   }
 

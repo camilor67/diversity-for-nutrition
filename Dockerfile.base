@@ -105,3 +105,6 @@ RUN Rscript -e "install.packages(c('s2', 'sf'), repos = 'https://cloud.r-project
 
 # HTML report generator
 RUN Rscript -e "install.packages('R2HTML', repos = 'https://cloud.r-project.org/')"
+
+# duckdb for parquet-based species lookup (replaces TIFF map loading)
+RUN Rscript -e "install.packages('duckdb', repos = 'https://cloud.r-project.org/')"

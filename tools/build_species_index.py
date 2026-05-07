@@ -18,10 +18,14 @@ Index shape (row-level, denormalized — matches R's filter_species semantics):
         "version": "<utc-iso>",
         "rows": [
             {"s": <species_idx>, "p": <part_id|null>, "g": <group_id|null>,
-             "f": <form_id|null>, "t": <type_id|null>, "tent": <bool>},
+             "f": <[form_id, ...]|null>, "t": <type_id|null>, "tent": <bool>},
             ...
         ]
     }
+
+`f` is a list because growth_form may combine multiple sources with "/"
+(e.g. "shrub/tree" = some sources classify it as shrub, others as tree).
+The client matches if the user's selection intersects this list.
 
 `s` is a 0-based species index assigned by first-seen order — used only for
 distinct counting on the client; species names are not shipped (smaller payload,
@@ -105,7 +109,11 @@ def build_index(src: Path, theme: Path) -> dict:
 
             part = plant_parts.get((raw.get("plant_part") or "").strip().lower())
             group = food_groups.get((raw.get("food_group") or "").strip().lower())
-            form = growth_forms.get((raw.get("growth_form") or "").strip().lower())
+            # growth_form may combine sources with "/" (e.g. "shrub/tree"); emit
+            # all matching IDs so the client can match on any token.
+            raw_form = (raw.get("growth_form") or "").strip().lower()
+            form_ids = [growth_forms[t] for t in raw_form.split("/") if t in growth_forms]
+            form = form_ids if form_ids else None
             stype = species_types.get((raw.get("wild_or_cultivated") or "").strip().lower())
 
             tentative = (
