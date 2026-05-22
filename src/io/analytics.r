@@ -7,6 +7,15 @@
 
 ANALYTICS_PREFIX <- "analytics/executions"
 
+# Solo cuentan invocaciones de la version publicada del alias `prod`.
+# AWS_LAMBDA_FUNCTION_VERSION es "$LATEST" sin qualifier (staging / tests con CLI sin
+# alias) y un numero ("1", "2", ...) cuando la invocacion pega un alias publicado.
+# Fuera de Lambda la variable no existe → excluye runs locales.
+.is_production <- function() {
+  ver <- Sys.getenv("AWS_LAMBDA_FUNCTION_VERSION", unset = "")
+  nzchar(ver) && ver != "$LATEST"
+}
+
 .analytics_fallback_id <- function() {
   paste0(
     "local-",
@@ -60,6 +69,10 @@ build_execution_record <- function(start_time, end_time, request_id,
 }
 
 log_execution <- function(record) {
+  if (!.is_production()) {
+    cat("  [analytics] skipped (not a published prod version)\n")
+    return(invisible(NULL))
+  }
   tryCatch({
     if (is.null(record) || !is.list(record)) return(invisible(NULL))
 
