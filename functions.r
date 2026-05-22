@@ -45,9 +45,17 @@ mainNutrition <- function(lon,
   setwd(R_HOME)
   source(file.path(R_HOME, "src", "libs.r"))
   source(file.path(R_HOME, "src", "io", "utils.r"))
+  source(file.path(R_HOME, "src", "io", "analytics.r"))
   if (!isTRUE(use_local)) init_cache()
   source("nutrition.r")
-  
+
+  for (g in c("d4r_last_country", "d4r_last_region", "d4r_last_parsed")) {
+    if (exists(g, envir = .GlobalEnv)) rm(list = g, envir = .GlobalEnv)
+  }
+
+  start_time <- Sys.time()
+  request_id <- Sys.getenv("D4R_REQUEST_ID", unset = "")
+
   result <- tryCatch({process_nutrition(
     lon = lon,
     lat = lat,
@@ -74,6 +82,24 @@ mainNutrition <- function(lon,
       paste(OUTPUT_FOLDER, date_download, sep = "/")
     }
     cat(paste0("\n[mainNutrition] Report path: ", report_path, "\n"))
+
+    g <- function(n) if (exists(n, envir = .GlobalEnv)) get(n, envir = .GlobalEnv) else NULL
+    log_execution(build_execution_record(
+      start_time = start_time, end_time = Sys.time(),
+      request_id = request_id,
+      country = g("d4r_last_country"), region = g("d4r_last_region"),
+      lon = suppressWarnings(as.numeric(lon)),
+      lat = suppressWarnings(as.numeric(lat)),
+      parsed = list(language_output = language_output, SSP = SSP,
+                    within_range = within_range, incl_tentative = incl_tentative,
+                    edible_parts_ID = edible_parts_ID,
+                    food_groups_ID = food_groups_ID,
+                    growth_forms_ID = growth_forms_ID,
+                    species_type_ID = species_type_ID,
+                    soil_con_ID = soil_con_ID),
+      success = TRUE
+    ))
+
     list(success = TRUE, report_path = report_path)
   }, error = function(e) {
     # Retornar error estructurado para que PHP/FE muestren el mensaje amigable
@@ -82,9 +108,21 @@ mainNutrition <- function(lon,
     if (!is.null(e$call)) {
       cat(paste0("[mainNutrition][ERROR_CALL] ", deparse(e$call), "\n"))
     }
+
+    g <- function(n) if (exists(n, envir = .GlobalEnv)) get(n, envir = .GlobalEnv) else NULL
+    log_execution(build_execution_record(
+      start_time = start_time, end_time = Sys.time(),
+      request_id = request_id,
+      country = g("d4r_last_country"), region = g("d4r_last_region"),
+      lon = suppressWarnings(as.numeric(lon)),
+      lat = suppressWarnings(as.numeric(lat)),
+      parsed = list(language_output = language_output, SSP = SSP),
+      success = FALSE, error_msg = msg
+    ))
+
     list(success = FALSE, message = msg)
   })
-  
+
   result
 }
 

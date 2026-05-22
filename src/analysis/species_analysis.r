@@ -137,9 +137,9 @@ filter_species <- function(nutr_dat,
   log_step("n09 [species_analysis]", "Filtering species: growth forms...")
   
   # select only the species with growth forms selected by the user.
-  # The CSV's growth_form may combine multiple sources with "/" (e.g. "shrub/tree"
-  # = some sources say shrub, others tree). Match if any token intersects the
-  # user's selection.
+  # The CSV's growth_form may combine sources with "/" (e.g. "shrub/tree" =
+  # Engemann/TRY/GTS disagreed). Match if any token intersects the user's
+  # selection so the user's "tree" filter still picks up "shrub/tree" rows.
   if(length(growth_forms_ID) > 0 && growth_forms_ID[1] != 1) {
     m <- match(growth_forms_ID, growth_forms$ID)
     growth_forms_sel <- growth_forms$growth_form[m]
@@ -151,8 +151,8 @@ filter_species <- function(nutr_dat,
   log_step("n09 [species_analysis]", "Filtering species: species types (wild/cultivated)...")
   
   # select only the species types selected by the user.
-  # nutr_dat's column is wild_or_cultivated, not species_type — the lookup
-  # table is named species_types but the data frame column is the longer name.
+  # The lookup table is named species_types but the column on nutr_dat is
+  # wild_or_cultivated (see line 173 below where the report uses the same name).
   if(length(species_type_ID) > 0 && species_type_ID[1] != 1) {
     m <- match(species_type_ID, species_types$ID)
     species_type_sel <- species_types$species_type[m]
