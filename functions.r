@@ -25,6 +25,29 @@ resolve_config_path <- function() {
 source(resolve_config_path())
 rm(resolve_config_path)
 
+# Publish a job status marker to S3 so asynchronous callers (WordPress) can poll
+# progress without holding the HTTP request open. The marker lives inside the
+# report folder (diversity/<job_id>/status.json) so the existing report_* S3
+# lifecycle rule cleans it up too. Non-fatal, and skipped in local mode.
+write_job_status <- function(job_id, status) {
+  if (isTRUE(use_local) || is.null(s3)) {
+    return(invisible(NULL))
+  }
+  tryCatch({
+    key <- paste(OUTPUT_FOLDER, job_id, "status.json", sep = "/")
+    body <- charToRaw(jsonlite::toJSON(status, auto_unbox = TRUE, pretty = TRUE))
+    s3$put_object(
+      Bucket = BUCKET_NAME,
+      Key = key,
+      Body = body,
+      ContentType = "application/json"
+    )
+  }, error = function(e) {
+    cat(paste0("[mainNutrition][WARN] could not write job status for ", job_id,
+      ": ", conditionMessage(e), "\n"))
+  })
+}
+
 # main function, which calls process_nutrition function
 mainNutrition <- function(lon,
                           lat,
@@ -36,12 +59,31 @@ mainNutrition <- function(lon,
                           within_range,
                           incl_tentative,
                           SSP,
-                          language_output) {
-  
+                          language_output,
+                          job_id = NULL) {
+
   date_download <<- format(Sys.time(), "report_%Y-%m-%d_%H-%M-%S")
   REPORT_FOLDER <<- file.path(tempdir(), date_download)
   dir.create(REPORT_FOLDER, recursive = TRUE, showWarnings = FALSE)
-  
+
+  # Async mode: when the caller provides a job_id it dictates the output folder
+  # name, so the result location is predictable without reading the invocation
+  # response (InvocationType=Event). We also publish a status.json marker the
+  # caller polls. Without job_id the function behaves exactly as before for
+  # synchronous (RequestResponse) callers.
+  async_mode <- !is.null(job_id) && nzchar(job_id)
+  if (async_mode) {
+    # Defensive: keep job_id to a safe S3-key charset (PHP already validates).
+    job_id <- gsub("[^A-Za-z0-9_-]", "", job_id)
+    date_download <<- job_id
+    REPORT_FOLDER <<- file.path(tempdir(), job_id)
+    dir.create(REPORT_FOLDER, recursive = TRUE, showWarnings = FALSE)
+    write_job_status(job_id, list(
+      state = "running",
+      started_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+    ))
+  }
+
   setwd(R_HOME)
   source(file.path(R_HOME, "src", "libs.r"))
   source(file.path(R_HOME, "src", "io", "utils.r"))
@@ -83,6 +125,16 @@ mainNutrition <- function(lon,
     }
     cat(paste0("\n[mainNutrition] Report path: ", report_path, "\n"))
 
+    # Publish "done" only AFTER every artifact is in S3, so a poller that sees
+    # done can safely download the full folder (incl. data.json).
+    if (async_mode) {
+      write_job_status(job_id, list(
+        state = "done",
+        report_path = report_path,
+        finished_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+      ))
+    }
+
     g <- function(n) if (exists(n, envir = .GlobalEnv)) get(n, envir = .GlobalEnv) else NULL
     log_execution(build_execution_record(
       start_time = start_time, end_time = Sys.time(),
@@ -107,6 +159,14 @@ mainNutrition <- function(lon,
     cat(paste0("\n[mainNutrition][ERROR] ", msg, "\n"))
     if (!is.null(e$call)) {
       cat(paste0("[mainNutrition][ERROR_CALL] ", deparse(e$call), "\n"))
+    }
+
+    if (isTRUE(async_mode)) {
+      write_job_status(job_id, list(
+        state = "error",
+        message = msg,
+        finished_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+      ))
     }
 
     g <- function(n) if (exists(n, envir = .GlobalEnv)) get(n, envir = .GlobalEnv) else NULL
