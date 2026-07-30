@@ -20,6 +20,14 @@ TMP_FOLDER <- tempdir()
 CACHE_DIR <- "/tmp/d4n_cache"
 CACHE_VERSION_KEY <- file.path(DATA_FOLDER, "cache_version.txt")
 
+# Read-only baked data directory: the working set shipped inside the container
+# image (D4N_maps.parquet, Tables/, the shapefiles). When a requested S3 object
+# exists here it is served with zero download; otherwise download_from_s3()
+# falls back to S3. A missing/empty directory means pure S3 behaviour, so this
+# is safe even when nothing is baked. init_cache() clears this value when the
+# baked snapshot is older than what S3 advertises. See scripts/sync_data.sh.
+BAKED_DIR <- Sys.getenv("BAKED_DATA_DIR", unset = "/opt/d4n_data")
+
 debug_mode <- as.logical(Sys.getenv("debug_mode", unset = "FALSE"))
 if (is.na(debug_mode)) {
   debug_mode <- FALSE

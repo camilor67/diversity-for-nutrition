@@ -184,6 +184,38 @@ init_cache <- function() {
   } else {
     cat(paste0("Cache valid (version: ", local_version %||% "no version", ")\n"))
   }
+
+  # Baked data staleness guard. /opt is immutable, so bumping cache_version.txt
+  # in S3 can never invalidate a baked file the way it invalidates /tmp. Without
+  # this check a stale image would keep serving an outdated parquet forever and
+  # silently. When the baked snapshot disagrees with S3 we drop to pure S3
+  # behaviour (slower but correct) and log what has to be rebuilt.
+  if (nzchar(BAKED_DIR) && dir.exists(BAKED_DIR)) {
+    baked_version_file <- local_path_from_key(BAKED_DIR, CACHE_VERSION_KEY)
+    baked_version <- if (file.exists(baked_version_file)) {
+      value <- tryCatch(trimws(readLines(baked_version_file, n = 1, warn = FALSE)),
+                        error = function(e) character(0))
+      if (length(value) == 0) "" else value[1]
+    } else {
+      NA_character_
+    }
+
+    if (is.na(baked_version)) {
+      # No marker means staleness cannot be verified at all, so don't trust the
+      # image. scripts/sync_data.sh asserts the marker is present.
+      cat("[baked] cache_version.txt missing from the baked snapshot;",
+          "falling back to S3. Rebuild with scripts/sync_data.sh.\n")
+      BAKED_DIR <<- ""
+    } else if (!is.null(remote_version) && !identical(baked_version, remote_version)) {
+      cat(paste0("[baked] STALE: image data ('", baked_version, "') is older than S3 ('",
+                 remote_version, "'); falling back to S3. Rebuild with ",
+                 "scripts/sync_data.sh && ./build.sh function && ./build.sh deploy\n"))
+      BAKED_DIR <<- ""
+    } else {
+      # Logged unconditionally: the only positive confirmation the guard ran.
+      cat(paste0("[baked] version matches S3: ", baked_version, "\n"))
+    }
+  }
 }
 
 download_from_s3 <- function(object_key) {
@@ -204,6 +236,18 @@ download_from_s3 <- function(object_key) {
     }
 
     return(local_file_path)
+  }
+
+  # Baked data: serve from the read-only image layer when present (no S3, no
+  # /tmp cache needed). Companion shapefile parts live alongside the .shp in the
+  # same baked directory, so returning the baked path is enough. If the object
+  # isn't baked, fall through to the S3 download + /tmp cache path below.
+  if (nzchar(BAKED_DIR)) {
+    baked_file_path <- local_path_from_key(BAKED_DIR, object_key)
+    if (file.exists(baked_file_path)) {
+      if (isTRUE(debug_mode)) cat("  [baked] hit:", object_key, "\n")
+      return(baked_file_path)
+    }
   }
 
   # Build destination path in persistent cache directory

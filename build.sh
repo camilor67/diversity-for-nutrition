@@ -49,7 +49,9 @@ build_base() {
 
 build_function() {
   echo ">>> Buildeando imagen Lambda..."
-  docker build \
+  # --platform is explicit: the Lambda function runs on arm64, and without this
+  # the image would inherit the build host's architecture.
+  docker build --platform linux/arm64 \
     --build-arg BASE_IMAGE="${ECR}/${BASE_REPO}:latest" \
     -t "${FUNCTION_REPO}:latest" .
   echo ">>> Tageando imagen..."
@@ -62,16 +64,28 @@ build_function() {
 deploy_lambda() {
   LAMBDA_FUNCTION=${LAMBDA_FUNCTION:-d4n}
   IMAGE_URI="${ECR}/${FUNCTION_REPO}:latest"
+
+  # deploy-cli may lack lambda:UpdateFunctionCode on this function (it does on
+  # `conservation`), so fall back to admin instead of failing. Either way this
+  # only updates $LATEST (staging); promoting to prod is a separate manual
+  # publish-version + update-alias.
+  DEPLOY_PROFILE=${DEPLOY_PROFILE:-deploy-cli}
+  if ! aws lambda get-function --function-name "${LAMBDA_FUNCTION}" \
+       --profile "${DEPLOY_PROFILE}" >/dev/null 2>&1; then
+    echo ">>> Perfil '${DEPLOY_PROFILE}' sin acceso a '${LAMBDA_FUNCTION}', usando 'admin'."
+    DEPLOY_PROFILE=admin
+  fi
+
   echo ">>> Actualizando Lambda '${LAMBDA_FUNCTION}' con imagen ${IMAGE_URI}..."
   aws lambda update-function-code \
     --function-name "${LAMBDA_FUNCTION}" \
     --image-uri "${IMAGE_URI}" \
-    --profile deploy-cli
+    --profile "${DEPLOY_PROFILE}"
   echo ">>> Esperando que Lambda quede activa..."
   aws lambda wait function-updated \
     --function-name "${LAMBDA_FUNCTION}" \
-    --profile deploy-cli
-  echo ">>> Lambda '${LAMBDA_FUNCTION}' actualizada."
+    --profile "${DEPLOY_PROFILE}"
+  echo ">>> Lambda '${LAMBDA_FUNCTION}' actualizada (\$LATEST / staging)."
 }
 
 case "${1:-}" in

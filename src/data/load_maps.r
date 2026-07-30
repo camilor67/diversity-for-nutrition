@@ -1,5 +1,15 @@
 # =============================================================================
 # Loading distribution maps (present) from S3 or local
+#
+# DEPRECATED — not called by the pipeline. nutrition.r resolves species with
+# extract_suitable_species_parquet() against D4N_data/D4N_maps.parquet; the calls
+# to load_maps() / extract_suitable_species() there are commented out.
+#
+# Kept for reference and as an escape hatch, but note what reviving it implies:
+# the Maps/ prefix it reads is 29 GiB of per-species rasters, it is NOT baked
+# into the image (scripts/sync_data.sh deliberately skips it) and it would not
+# fit — Lambda's limit is 10 GB including the base image. Any path built on this
+# would download from S3 on every cold start.
 # =============================================================================
 
 # load present distribution maps for all species in species_set
