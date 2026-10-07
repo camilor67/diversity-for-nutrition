@@ -1,24 +1,12 @@
 # load packages
 library(readxl)
 
-# set user of the script
-user <- "Tobias"
-# user <- "Chrystian"
-
-# set base directory
-if(user == "Tobias") {
-  basedir <- "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/Data/Tables Chrystian"
-}
-if(user == "Chrystian") {
-  basedir <- ""
-}
-
 # load data
-setwd(dir = basedir)
-dat <- read_excel("species_nutrition_data_202604013.xlsx", sheet = "tool_format")
+setwd(dir = "C:/Users/tobia/Dropbox/VAVILOV_2.0/Results/species_lists/species_curated/TO_CHECK")
+dat <- read_excel("Species_20260508_edible_part_curated.xlsx", sheet = "Species_list")
 
 # load keywords - food groups table
-setwd(dir = basedir)
+setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/D4N_data/Tables Chrystian")
 keywords <- read.csv("keywords_food_group.csv")
 
 # make an empty list to store the results
@@ -37,7 +25,7 @@ for (r in (1:nrow(dat))) {
     for (k in 1:nrow(keywords)) {
       
       keyword <- keywords$keyword[k]
-      g <- grepl(pattern = keyword,  use)
+      g <- grepl(pattern = paste0("\\b", keyword, "\\b"), use)
       
       # if yes, add the row as a new row to dat_new
       # but only if that species x food group combination is not in the database yet
@@ -52,17 +40,21 @@ for (r in (1:nrow(dat))) {
           dat_new <- dat[r,]
           dat_new$food_group<- keywords$food_group[k]
           
-          # leave empty part, edible_portion, plant_part, plant_part_tentative,
-          # plant_part_ref, plant_part_assumption
+          # fill in other columns where necessary
           dat_new$part <- NA
           dat_new$edible_portion <- NA
           dat_new$plant_part <- "?"
-          dat_new$plant_part_tentative <- "?"
-          dat_new$plant_part_ref <- "?"
-          dat_new$plant_part_assumption <- "?"
+          dat_new$plant_part_tentative <- ""
+          dat_new$plant_part_database_ref <- "FPI use description"
+          dat_new$plant_part_ref <- "FPI use description"
+          dat_new$plant_part_assumption <- ""
+          dat_new$food_group_orig <- ""
+          dat_new$food_group_tentative <- 0
+          dat_new$food_group_assumption <- paste0("Based on FPI use description using keywords: ",
+                                                  keywords$keyword[k],  " -> ",
+                                                  keywords$food_group[k])
           print(paste0("row added: ", 
-                       dat_new$food_group, " - ",
-                       dat_new$use))
+                       dat_new$food_group, " - ", keywords$keyword[k], " - ", dat_new$use))
           
           # add to list
           dat_added[[length(dat_added) + 1]] <- dat_new
@@ -77,8 +69,18 @@ for (r in (1:nrow(dat))) {
 dat_added <- do.call("rbind", dat_added)
 
 # remove duplicates
-i <- which(duplicated(paste0(dat_added$species, dat_added$food_groups)))
+i <- which(duplicated(paste0(dat_added$species, dat_added$food_group)))
 dat_added <- dat_added[-i,]
+
+# add an extra row
+dat_added$row_added_with_R  <- 1
+
+# save
+setwd(dir = "C:/Users/tobia/Dropbox/VAVILOV_2.0/Results/species_lists/species_curated/TO_CHECK")
+write.csv(dat_added, "extra_data_use_descriptions.csv")
+
+
+
 
 
 
