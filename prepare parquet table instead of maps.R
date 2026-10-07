@@ -11,6 +11,8 @@
 #   species      — species name (from filename)
 #   lon, lat     — pixel centre coordinates
 #   present_now  — 0/1 from Presence-absence (unmasked)
+#                  NA where the future maps have no data (temporary,
+#                  until present and future land masks match)
 #   present_ssp2 — 0-5 from Future/SSP2 (unmasked)
 #   present_ssp3 — 0-5 from Future/SSP3 (unmasked)
 #                  species without future maps: present_now * 5
@@ -46,7 +48,8 @@ dir_hull <- file.path(base_maps, "Presence-absence masked by hull")
 dir_ssp2 <- file.path(base_maps, "Future/SSP2")
 dir_ssp3 <- file.path(base_maps, "Future/SSP3")
 
-out_parquet <- file.path(dirname(base_maps), "D4N_maps.parquet")
+# written under a separate name; rename to D4N_maps.parquet manually after checking
+out_parquet <- file.path(dirname(base_maps), "D4N_merged.parquet")
 chunk_dir   <- file.path(dirname(base_maps), "parquet_chunks")
 
 # start from an empty chunk dir so stale chunks aren't merged
@@ -70,6 +73,9 @@ cat("Present without SSP3 map  :", sum(!files_now %in% files_ssp3), "(filled fro
 cat("SSP2 map without present  :", sum(!files_ssp2 %in% files_now), "(ignored)\n")
 cat("SSP3 map without present  :", sum(!files_ssp3 %in% files_now), "(ignored)\n")
 cat("SSP2 and SSP3 sets differ :", length(setdiff(union(files_ssp2, files_ssp3), intersect(files_ssp2, files_ssp3))), "\n\n")
+
+# future land mask for species without future maps (same for all species)
+ref_future <- file.path(dir_ssp2, files_ssp2[1])
 
 # ---- per-species function (runs on each worker) ------------
 process_species <- function(fname) {
@@ -112,6 +118,16 @@ process_species <- function(fname) {
   # extract values
   vals <- values(stk)
 
+  # no future data: set present to NA too (temporary, until land masks match)
+  # (reference map aligned to this species' grid, extents can differ)
+  fut_mask <- if (has_ssp2) {
+    vals[, "present_ssp2"]
+  } else {
+    values(crop(extend(rast(ref_future), r_now), r_now))[, 1]
+  }
+  if (length(fut_mask) != nrow(vals)) stop(sprintf("Future mask does not match grid for '%s'", sp_name))
+  vals[is.na(fut_mask), "present_now"] <- NA
+
   # missing future map: all 5 models assumed to agree with present
   ssp2 <- if (has_ssp2) vals[, "present_ssp2"] else vals[, "present_now"] * 5L
   ssp3 <- if (has_ssp3) vals[, "present_ssp3"] else vals[, "present_now"] * 5L
@@ -144,7 +160,7 @@ n_cores <- max(1, detectCores() - 6)
 cat(sprintf("Using %d cores\n\n", n_cores))
 
 cl <- makeCluster(n_cores)
-clusterExport(cl, c("dir_now", "dir_hull", "dir_ssp2", "dir_ssp3"))
+clusterExport(cl, c("dir_now", "dir_hull", "dir_ssp2", "dir_ssp3", "ref_future"))
 clusterEvalQ(cl, { library(terra); library(data.table) })
 
 # ---- process in chunks of 500 to keep RAM manageable -------
