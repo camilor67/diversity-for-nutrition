@@ -51,4 +51,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+<<<<<<< HEAD
 .positai
+=======
+.DS_Store
+>>>>>>> ba5774a0d6e76aa1179086a906242c07617eb0f2

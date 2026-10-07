@@ -105,3 +105,9 @@ RUN Rscript -e "install.packages(c('s2', 'sf'), repos = 'https://cloud.r-project
 
 # HTML report generator
 RUN Rscript -e "install.packages('R2HTML', repos = 'https://cloud.r-project.org/')"
+
+# duckdb for parquet-based species lookup (replaces TIFF map loading).
+# xz binary is required because the duckdb source tarball ships its C++ source
+# as duckdb.tar.xz which `R CMD INSTALL` extracts at configure time.
+RUN yum -y install xz && yum clean all
+RUN Rscript -e "install.packages('duckdb', repos = 'https://cloud.r-project.org/')"

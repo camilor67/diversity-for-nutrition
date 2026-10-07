@@ -81,6 +81,8 @@ process_nutrition <- function(lon = NULL,
     ##############################################################################
     country <- coords2country(inputs$lon, inputs$lat)
     region <- region_from_country(country)
+    assign("d4r_last_country", as.character(country), envir = .GlobalEnv)
+    assign("d4r_last_region",  as.character(region),  envir = .GlobalEnv)
     
     ##############################################################################
     # Load maps

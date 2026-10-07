@@ -140,6 +140,9 @@ handle_event <- function(event) {
     Sys.setenv("_X_AMZN_TRACE_ID" = runtime_trace_id)
   }
 
+  # Exponer el request id al handler para que pueda incluirlo en analytics
+  Sys.setenv("D4R_REQUEST_ID" = aws_request_id)
+
   # we need to parse the event in four contexts before sending to the lambda fn:
   # 1a) direct invocation with no function args (empty event)
   # 1b) direct invocation with function args (parse and send entire event)
