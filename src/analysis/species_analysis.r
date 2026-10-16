@@ -113,7 +113,15 @@ filter_species <- function(nutr_dat,
   # select only the suitable species
   j <- which(nutr_dat$species %in% suitable_species)
   nutr_dat <- nutr_dat[j,]
-  
+
+  log_step("n06b [species_analysis]", "Filtering species: tentative edible parts/food groups...")
+
+  # drop rows with a tentative edible part or food group unless the user includes them
+  if(incl_tentative == "no") {
+    j <- which(!(nutr_dat$plant_part_tentative %in% "1" | nutr_dat$food_group_tentative %in% "1"))
+    nutr_dat <- nutr_dat[j,]
+  }
+
   log_step("n07 [species_analysis]", "Filtering species: edible parts...")
   
   # select only the species with edible parts selected by the user
