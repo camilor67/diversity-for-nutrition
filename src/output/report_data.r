@@ -24,6 +24,13 @@ generate_report_data <- function(inputs,
   # Translation labels for the selected language (may be NULL if trans_df empty)
   labels <- if (!is.null(trans_df) && nrow(trans_df) > 0) as.list(trans_df) else list()
 
+  # Species without future maps: show text instead of a percentage
+  if (nrow(species_df) > 0) {
+    no_fut <- is.na(species_df$future_suitability)
+    species_df$future_suitability <- as.character(species_df$future_suitability)
+    species_df$future_suitability[no_fut] <- labels$no_future_projections
+  }
+
   # Assemble the payload: echoes the inputs, adds derived context, ships the results.
   report_data <- list(
     coords = list(lon = inputs$lon, lat = inputs$lat),

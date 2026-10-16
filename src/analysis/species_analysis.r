@@ -30,7 +30,7 @@ extract_suitable_species_parquet <- function(lon, lat, within_range, SSP) {
       ORDER BY ((lon - %f)^2 + (lat - %f)^2)
       LIMIT 1
     )
-    SELECT species, present_now, %s AS n_models
+    SELECT species, present_now, %s AS n_models, has_future
     FROM read_parquet('%s')
     WHERE lon = (SELECT lon FROM closest)
       AND lat = (SELECT lat FROM closest)
@@ -43,8 +43,9 @@ extract_suitable_species_parquet <- function(lon, lat, within_range, SSP) {
   suitable_idx <- result$present_now == 1
   suitable_species <- result$species[suitable_idx]
   
-  # get n_models for suitable species only
+  # get n_models for suitable species only (NA if no future projections were made)
   n_models <- result$n_models[suitable_idx]
+  n_models[!result$has_future[suitable_idx]] <- NA
   names(n_models) <- suitable_species
   
   # return of the function
@@ -183,8 +184,11 @@ filter_species <- function(nutr_dat,
     
   }
   
+  # future suitability: % of the 5 models predicting future presence
+  nutr_dat$future_suitability <- round(unname(n_models[nutr_dat$species]) / 5 * 100)
+
   # select only relevant columns for report
-  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use")]
+  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability")]
   nutr_table <- nutr_table[order(nutr_table$family, nutr_table$species), ]
   
   # return of the function
