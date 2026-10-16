@@ -36,8 +36,9 @@ summary(df)
 
 # save
 df <- df[c("species_searched", "biome", "var", "n_obs_eco", "sp_median", "category", "category_ID")]
+names(df)[names(df) == "species_searched"] <- "species"
 setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/D4N_data/Tables")
-write.csv(df, "D4N_soil_extremes.csv")
+write.csv(df, "D4N_soil_extremes.csv", row.names = FALSE)
 
 
 
