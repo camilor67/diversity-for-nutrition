@@ -15,29 +15,41 @@ extract_suitable_species_parquet <- function(lon, lat, within_range, SSP) {
   # select the right future column based on SSP
   ssp_col <- ifelse(SSP == "SSP2", "present_ssp2", "present_ssp3")
   
-  # build optional hull filter
-  hull_filter <- ifelse(within_range == "yes", "AND within_hull = TRUE", "")
-  
+  # centre of the 2.5' grid cell containing the point (grid starts at lon -118, lat 34)
+  res <- 1 / 24
+  cell_lon <- -118 + (floor((lon + 118) / res) + 0.5) * res
+  cell_lat <- 34 - (floor((34 - lat) / res) + 0.5) * res
+
   con <- dbConnect(duckdb())
-  
+
   log_step("n05b [species_analysis]", "Extracting future presence...")
-  
-  # find nearest grid point and extract all species info in one query
-  result <- dbGetQuery(con, sprintf("
-    WITH closest AS (
+
+  # get all species info for one grid cell
+  query_cell <- function(cl, ca) {
+    dbGetQuery(con, sprintf("
+      SELECT species, present_now, %s AS n_models, has_future, within_hull
+      FROM read_parquet('%s')
+      WHERE lon BETWEEN %.8f AND %.8f
+        AND lat BETWEEN %.8f AND %.8f
+    ", ssp_col, parquet_path, cl - res / 4, cl + res / 4, ca - res / 4, ca + res / 4))
+  }
+  result <- query_cell(cell_lon, cell_lat)
+
+  # no data in that cell (e.g. coast or lake): use the nearest cell with data (slow)
+  if (nrow(result) == 0) {
+    closest <- dbGetQuery(con, sprintf("
       SELECT lon, lat
       FROM read_parquet('%s')
       ORDER BY ((lon - %f)^2 + (lat - %f)^2)
       LIMIT 1
-    )
-    SELECT species, present_now, %s AS n_models, has_future
-    FROM read_parquet('%s')
-    WHERE lon = (SELECT lon FROM closest)
-      AND lat = (SELECT lat FROM closest)
-      %s
-  ", parquet_path, lon, lat, ssp_col, parquet_path, hull_filter))
-  
+    ", parquet_path, lon, lat))
+    result <- query_cell(closest$lon, closest$lat)
+  }
+
   dbDisconnect(con)
+
+  # optional hull filter
+  if (within_range == "yes") result <- result[result$within_hull, ]
   
   # filter suitable species (present_now == 1)
   suitable_idx <- result$present_now == 1
