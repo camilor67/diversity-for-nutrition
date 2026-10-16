@@ -121,4 +121,5 @@ The viewer is intentionally independent from the production report (which lives 
 - `terra` — biome and country lookup (shapefiles)
 - `jsonlite` — JSON output
 - `paws` — AWS S3 (only needed when `USE_LOCAL_FILES=FALSE`)
+- `httr` — Lambda runtime API (`runtime.r`)
 - Data preparation only: `arrow`, `data.table`, `readxl`
