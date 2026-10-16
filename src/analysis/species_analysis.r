@@ -188,14 +188,51 @@ filter_species <- function(nutr_dat,
   nutr_dat$future_suitability <- round(unname(n_models[nutr_dat$species]) / 5 * 100)
 
   # select only relevant columns for report
-  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability")]
+  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability", "plant_part_ref", "use_ref")]
   nutr_table <- nutr_table[order(nutr_table$family, nutr_table$species), ]
-  
+
   # return of the function
   list(
     nutr_table = nutr_table
   )
-  
+
+}
+
+# =============================================================================
+# Number the references (edible part and use) of the species in the table
+# =============================================================================
+build_references <- function(nutr_table) {
+
+  log_step("n10b [species_analysis]", "Building reference list...")
+
+  # full reference for Food Plants International
+  fpi_ref <- "Food Plants International. Food Plants International database. https://foodplantsinternational.com"
+
+  # get each row's references: FPI-based edible parts only cite FPI, others are split per line
+  row_refs <- lapply(seq_len(nrow(nutr_table)), function(i) {
+    pp_ref <- nutr_table$plant_part_ref[i]
+    if (startsWith(pp_ref, "FPI ref:") || pp_ref == "FPI use description") {
+      r <- fpi_ref
+    } else {
+      r <- trimws(unlist(strsplit(pp_ref, "[\v\n]")))
+      r <- r[r != ""]
+    }
+    if (nutr_table$use_ref[i] %in% "FPI") r <- c(r, fpi_ref)
+    unique(r)
+  })
+
+  # number unique references in order of appearance in the table
+  all_refs <- as.character(unique(unlist(row_refs)))
+  nutr_table$references <- vapply(row_refs, function(r) paste(sort(match(r, all_refs)), collapse = ", "), character(1))
+  nutr_table$plant_part_ref <- NULL
+  nutr_table$use_ref <- NULL
+
+  # return of the function
+  list(
+    nutr_table = nutr_table,
+    references = data.frame(nr = seq_along(all_refs), reference = all_refs)
+  )
+
 }
 
 

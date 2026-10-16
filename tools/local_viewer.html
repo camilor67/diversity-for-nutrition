@@ -95,7 +95,7 @@
             </div>
         </div>
 
-        <h2>Recommended species (<span id="n-species">0</span>)</h2>
+        <h2>Suitable species (<span id="n-species">0</span>)</h2>
 
         <div id="empty-state" class="alert alert-warning" style="display:none;">
             <strong>No species match the current selection.</strong>
@@ -113,9 +113,21 @@
                 <th>Food group</th>
                 <th>Use</th>
                 <th>Future suitability (% of models)</th>
+                <th>References</th>
             </tr></thead>
             <tbody></tbody>
         </table>
+
+        <div id="references-section" style="display:none;">
+            <h2>References</h2>
+            <table class="table table-striped" id="referencesTable">
+                <thead><tr>
+                    <th>#</th>
+                    <th>Reference</th>
+                </tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -193,7 +205,23 @@
                     { data: 'plant_part',         defaultContent: '' },
                     { data: 'food_group',         defaultContent: '' },
                     { data: 'use',                defaultContent: '' },
-                    { data: 'future_suitability', defaultContent: '' }
+                    { data: 'future_suitability', defaultContent: '' },
+                    { data: 'references',         defaultContent: '' }
+                ]
+            });
+        }
+
+        // References table (numbers match the References column above)
+        var refs = d.references || [];
+        if (refs.length > 0) {
+            document.getElementById('references-section').style.display = '';
+            jQuery('#referencesTable').DataTable({
+                data: refs,
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'All']],
+                columns: [
+                    { data: 'nr' },
+                    { data: 'reference' }
                 ]
             });
         }

@@ -50,6 +50,7 @@ generate_report_data <- function(inputs,
     ),
     n_species = nrow(species_df),
     species = if (nrow(species_df) > 0) species_df else NULL,
+    references = if (nrow(species_filt$references) > 0) species_filt$references else NULL,
     labels = labels
   )
 

@@ -135,15 +135,23 @@ process_nutrition <- function(lon = NULL,
       incl_tentative = inputs$incl_tentative,
       language_output = inputs$language_output
     )
+
     ##############################################################################
-    # 6. Generate report data (JSON for frontend consumption)
+    # 6. Number the references of the suitable species
+    ##############################################################################
+    species_refs <- build_references(
+      nutr_table = species_filt$nutr_table
+    )
+
+    ##############################################################################
+    # 7. Generate report data (JSON for frontend consumption)
     ##############################################################################
     generate_report_data(
       inputs        = inputs,
       country       = country,
       region        = region,
       biome_name    = biome$biome_name,
-      species_filt  = species_filt,
+      species_filt  = species_refs,
       trans_df      = data$trans_df,
       output_folder = REPORT_FOLDER
     )
