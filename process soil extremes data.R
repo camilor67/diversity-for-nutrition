@@ -2,14 +2,14 @@
 library(readxl)
 
 # load data
-setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/Data/Tables Chrystian")
-df <- read_xlsx("soil_outliers_20260401.xlsx")
+setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/D4N_data/Tables Chrystian")
+df <- read_xlsx("soil_outliers_list_ecosystems_20261015.xlsx")
 
-setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/Data/Tables")
+setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/D4N_data/Tables")
 var_cats <- read.csv("D4N_soil_vars.csv")
 var_cats <- var_cats[!is.na(var_cats$var), ]
 
-# flag species with n >= 10 whose median falls outside the biome reference IQR
+# flag species with n >= 30 whose median falls outside the biome reference IQR
 df$outlier_low  <- df$n_total >= 10 & df$sp_median < df$Q25_ref_eco
 df$outlier_high <- df$n_total >= 10 & df$sp_median > df$Q75_ref_eco
 df$outlier      <- df$outlier_low | df$outlier_high
@@ -31,9 +31,12 @@ df$category_ID <- NA
 m <- match(df$category, var_cats$category_EN)
 df$category_ID <- var_cats$ID_extreme[m]
 
+# inspect
+summary(df)
+
 # save
 df <- df[c("species_searched", "biome", "var", "n_obs_eco", "sp_median", "category", "category_ID")]
-setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/Data/Tables")
+setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/D4N_data/Tables")
 write.csv(df, "D4N_soil_extremes.csv")
 
 
