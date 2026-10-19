@@ -22,6 +22,7 @@
 #
 # Only pixels where (present in any scenario) OR (within hull)
 # are stored. All-absent, out-of-hull pixels are dropped.
+# Rows are sorted by lat, lon, species for fast location queries.
 # ============================================================
 
 # load packages
@@ -205,25 +206,64 @@ stopCluster(cl)
 # ---- check chunks written ----------------------------------
 cat(sprintf("\nChunks written: %d\n", length(list.files(chunk_dir, pattern = "\\.parquet$"))))
 
-# ---- merge all chunks into one parquet ---------------------
-cat("Merging chunks...\n")
+# ---- merge all chunks into one parquet, sorted by location -
+# sorted by lat/lon so the tool's grid cell query only reads a few row groups
+cat("Merging chunks (sorted by location)...\n")
 
 chunk_paths <- list.files(chunk_dir, pattern = "\\.parquet$", full.names = TRUE)
 if (length(chunk_paths) == 0) stop("No chunk files found — check that chunk writing succeeded above")
 
-# connect to in-memory duckdb instance
-con <- dbConnect(duckdb())
+# intermediate files outside Dropbox
+tmp_root   <- normalizePath(tempdir(), winslash = "/")
+band_dir   <- file.path(tmp_root, "parquet_bands")
+sorted_dir <- file.path(tmp_root, "parquet_bands_sorted")
+unlink(c(band_dir, sorted_dir), recursive = TRUE)
+dir.create(sorted_dir)
 
-# merge all parquet chunks into one file
+# connect to in-memory duckdb instance (spills to disk outside Dropbox if needed)
+con <- dbConnect(duckdb())
+dbExecute(con, sprintf("SET temp_directory = '%s'", file.path(tmp_root, "duckdb_tmp")))
+
+# 1. split all rows into 1-degree latitude bands (one pass over the chunks)
 dbExecute(con, sprintf("
-  COPY (
-    SELECT * FROM read_parquet('%s/*.parquet')
-  )
+  COPY (SELECT *, CAST(floor(lat) AS INTEGER) AS band FROM read_parquet('%s/*.parquet'))
+  TO '%s'
+  (FORMAT PARQUET, PARTITION_BY (band))
+", chunk_dir, band_dir))
+
+# 2. sort each band by lat, lon, species (files numbered from south to north)
+bands <- sort(as.integer(sub("^band=", "", list.files(band_dir))))
+for (k in seq_along(bands)) {
+  cat(sprintf("  sorting band %d/%d (lat %d)\n", k, length(bands), bands[k]))
+  dbExecute(con, sprintf("
+    COPY (
+      SELECT * EXCLUDE (band)
+      FROM read_parquet('%s/band=%d/*.parquet', hive_partitioning = true)
+      ORDER BY lat, lon, species
+    )
+    TO '%s/band_%03d.parquet'
+    (FORMAT PARQUET)
+  ", band_dir, bands[k], sorted_dir, k))
+}
+
+# 3. concatenate the sorted bands in order into one file
+dbExecute(con, sprintf("
+  COPY (SELECT * FROM read_parquet('%s/band_*.parquet'))
   TO '%s'
   (FORMAT PARQUET)
-", chunk_dir, out_parquet))
+", sorted_dir, out_parquet))
 
-dbDisconnect(con)
+# check: each row group should start at or after the latitude where the previous one ended
+rg <- dbGetQuery(con, sprintf("
+  SELECT row_group_id, CAST(stats_min_value AS DOUBLE) AS lat_min, CAST(stats_max_value AS DOUBLE) AS lat_max
+  FROM parquet_metadata('%s')
+  WHERE path_in_schema = 'lat'
+  ORDER BY row_group_id
+", out_parquet))
+cat(sprintf("Row groups: %d, out of latitude order: %d\n", nrow(rg), sum(rg$lat_min[-1] < rg$lat_max[-nrow(rg)])))
+
+dbDisconnect(con, shutdown = TRUE)
+unlink(c(band_dir, sorted_dir, file.path(tmp_root, "duckdb_tmp")), recursive = TRUE)
 
 # # read all chunks and write as single parquet file
 # ds    <- open_dataset(chunk_dir, format = "parquet")
@@ -247,20 +287,18 @@ target_lat <- 5
 
 con <- dbConnect(duckdb())
 
-# find species present at the nearest grid point, no full table load
-species_here <- dbGetQuery(con, sprintf("
-  WITH closest AS (
-    SELECT lon, lat
-    FROM read_parquet('%s')
-    ORDER BY ((lon - %f)^2 + (lat - %f)^2)
-    LIMIT 1
-  )
+# find species present in the grid cell containing the point (same as the tool)
+res <- 1 / 24
+cell_lon <- -118 + (floor((target_lon + 118) / res) + 0.5) * res
+cell_lat <- 34 - (floor((34 - target_lat) / res) + 0.5) * res
+t_query <- system.time(species_here <- dbGetQuery(con, sprintf("
   SELECT DISTINCT species
   FROM read_parquet('%s')
   WHERE present_now = 1
-    AND lon = (SELECT lon FROM closest)
-    AND lat = (SELECT lat FROM closest)
-", out_parquet, target_lon, target_lat, out_parquet))
+    AND lon BETWEEN %.8f AND %.8f
+    AND lat BETWEEN %.8f AND %.8f
+", out_parquet, cell_lon - res / 4, cell_lon + res / 4, cell_lat - res / 4, cell_lat + res / 4)))
+cat(sprintf("Test query: %d species in %.1f s\n", nrow(species_here), t_query[["elapsed"]]))
 
 dbDisconnect(con)
 
