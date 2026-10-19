@@ -52,7 +52,7 @@ extract_suitable_species_parquet <- function(lon, lat, within_range, SSP) {
   if (within_range == "yes") result <- result[result$within_hull, ]
   
   # filter suitable species (present_now == 1)
-  suitable_idx <- result$present_now == 1
+  suitable_idx <- which(result$present_now == 1)
   suitable_species <- result$species[suitable_idx]
   
   # get n_models for suitable species only (NA if no future projections were made)
