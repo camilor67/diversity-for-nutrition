@@ -19,6 +19,12 @@
 #   3. ./scripts/sync_data.sh
 #   4. ./build.sh function && ./build.sh deploy      # -> $LATEST (staging)
 #
+# A new dataset can instead live under its own prefix, so the version :prod
+# runs keeps reading the old one untouched (2026-10: D4N_data_2026-10):
+#   ROOT=D4N_data_2026-10 ./scripts/sync_data.sh
+# and set the function's env DATA_FOLDER to the same prefix. ROOT must match
+# DATA_FOLDER: the runtime looks baked files up by S3 key.
+#
 # Skipping step 4 after step 2 is safe: init_cache() detects the version
 # mismatch, disables the baked directory and falls back to S3.
 set -euo pipefail
@@ -40,6 +46,17 @@ FILES=(
   "D4N_maps.parquet"
   "cache_version.txt"
 )
+
+# Only one dataset may be baked: the Dockerfile copies all of baked_data/, and
+# a second prefix left over from an earlier sync would bloat the image towards
+# Lambda's 10 GB limit while never being read.
+for other in "$REPO_DIR"/baked_data/*/; do
+  [ -d "$other" ] || continue
+  if [ "$(basename "$other")" != "$ROOT" ]; then
+    echo "ERROR: baked_data/ also holds $(basename "$other"); remove it before baking $ROOT." >&2
+    exit 1
+  fi
+done
 
 mkdir -p "$DEST"
 
