@@ -15,36 +15,49 @@ extract_suitable_species_parquet <- function(lon, lat, within_range, SSP) {
   # select the right future column based on SSP
   ssp_col <- ifelse(SSP == "SSP2", "present_ssp2", "present_ssp3")
   
-  # build optional hull filter
-  hull_filter <- ifelse(within_range == "yes", "AND within_hull = TRUE", "")
-  
+  # centre of the 2.5' grid cell containing the point (grid starts at lon -118, lat 34)
+  res <- 1 / 24
+  cell_lon <- -118 + (floor((lon + 118) / res) + 0.5) * res
+  cell_lat <- 34 - (floor((34 - lat) / res) + 0.5) * res
+
   con <- dbConnect(duckdb())
-  
+
   log_step("n05b [species_analysis]", "Extracting future presence...")
-  
-  # find nearest grid point and extract all species info in one query
-  result <- dbGetQuery(con, sprintf("
-    WITH closest AS (
+
+  # get all species info for one grid cell
+  query_cell <- function(cl, ca) {
+    dbGetQuery(con, sprintf("
+      SELECT species, present_now, %s AS n_models, has_future, within_hull
+      FROM read_parquet('%s')
+      WHERE lon BETWEEN %.8f AND %.8f
+        AND lat BETWEEN %.8f AND %.8f
+    ", ssp_col, parquet_path, cl - res / 4, cl + res / 4, ca - res / 4, ca + res / 4))
+  }
+  result <- query_cell(cell_lon, cell_lat)
+
+  # no data in that cell (e.g. coast or lake): use the nearest cell with data (slow)
+  if (nrow(result) == 0) {
+    closest <- dbGetQuery(con, sprintf("
       SELECT lon, lat
       FROM read_parquet('%s')
       ORDER BY ((lon - %f)^2 + (lat - %f)^2)
       LIMIT 1
-    )
-    SELECT species, present_now, %s AS n_models
-    FROM read_parquet('%s')
-    WHERE lon = (SELECT lon FROM closest)
-      AND lat = (SELECT lat FROM closest)
-      %s
-  ", parquet_path, lon, lat, ssp_col, parquet_path, hull_filter))
-  
+    ", parquet_path, lon, lat))
+    result <- query_cell(closest$lon, closest$lat)
+  }
+
   dbDisconnect(con)
+
+  # optional hull filter
+  if (within_range == "yes") result <- result[result$within_hull, ]
   
   # filter suitable species (present_now == 1)
-  suitable_idx <- result$present_now == 1
+  suitable_idx <- which(result$present_now == 1)
   suitable_species <- result$species[suitable_idx]
   
-  # get n_models for suitable species only
+  # get n_models for suitable species only (NA if no future projections were made)
   n_models <- result$n_models[suitable_idx]
+  n_models[!result$has_future[suitable_idx]] <- NA
   names(n_models) <- suitable_species
   
   # return of the function
@@ -113,7 +126,15 @@ filter_species <- function(nutr_dat,
   # select only the suitable species
   j <- which(nutr_dat$species %in% suitable_species)
   nutr_dat <- nutr_dat[j,]
-  
+
+  log_step("n06b [species_analysis]", "Filtering species: tentative edible parts/food groups...")
+
+  # drop rows with a tentative edible part or food group unless the user includes them
+  if(incl_tentative == "no") {
+    j <- which(!(nutr_dat$plant_part_tentative %in% "1" | nutr_dat$food_group_tentative %in% "1"))
+    nutr_dat <- nutr_dat[j,]
+  }
+
   log_step("n07 [species_analysis]", "Filtering species: edible parts...")
   
   # select only the species with edible parts selected by the user
@@ -175,15 +196,55 @@ filter_species <- function(nutr_dat,
     
   }
   
+  # future suitability: % of the 5 models predicting future presence
+  nutr_dat$future_suitability <- round(unname(n_models[nutr_dat$species]) / 5 * 100)
+
   # select only relevant columns for report
-  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use")]
+  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability", "plant_part_ref", "use_ref")]
   nutr_table <- nutr_table[order(nutr_table$family, nutr_table$species), ]
-  
+
   # return of the function
   list(
     nutr_table = nutr_table
   )
-  
+
+}
+
+# =============================================================================
+# Number the references (edible part and use) of the species in the table
+# =============================================================================
+build_references <- function(nutr_table) {
+
+  log_step("n10b [species_analysis]", "Building reference list...")
+
+  # full reference for Food Plants International
+  fpi_ref <- "Food Plants International. Food Plants International database. https://foodplantsinternational.com"
+
+  # get each row's references: FPI-based edible parts only cite FPI, others are split per line
+  row_refs <- lapply(seq_len(nrow(nutr_table)), function(i) {
+    pp_ref <- nutr_table$plant_part_ref[i]
+    if (startsWith(pp_ref, "FPI ref:") || pp_ref == "FPI use description") {
+      r <- fpi_ref
+    } else {
+      r <- trimws(unlist(strsplit(pp_ref, "[\v\n]")))
+      r <- r[r != ""]
+    }
+    if (nutr_table$use_ref[i] %in% "FPI") r <- c(r, fpi_ref)
+    unique(r)
+  })
+
+  # number unique references in order of appearance in the table
+  all_refs <- as.character(unique(unlist(row_refs)))
+  nutr_table$references <- vapply(row_refs, function(r) paste(sort(match(r, all_refs)), collapse = ", "), character(1))
+  nutr_table$plant_part_ref <- NULL
+  nutr_table$use_ref <- NULL
+
+  # return of the function
+  list(
+    nutr_table = nutr_table,
+    references = data.frame(nr = seq_along(all_refs), reference = all_refs)
+  )
+
 }
 
 

@@ -55,3 +55,4 @@ rsconnect/
 # Working set synced from S3 for the Docker build. Never versioned;
 # S3 (s3://d4n-data/D4N_data) is the source of truth. See scripts/sync_data.sh.
 baked_data/
+.positai

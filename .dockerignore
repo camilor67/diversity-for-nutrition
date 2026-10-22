@@ -5,7 +5,6 @@ Dockerfile.base
 build.sh
 test_runner.R
 process soil extremes data.R
-split rasters in South and Central America.R
 local_data
 .env
 .Renviron
