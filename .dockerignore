@@ -10,3 +10,4 @@ local_data
 .Renviron
 .Rproj.user
 *.Rproj
+data_full

@@ -56,3 +56,7 @@ rsconnect/
 # S3 (s3://d4n-data/D4N_data) is the source of truth. See scripts/sync_data.sh.
 baked_data/
 .positai
+
+# The delivered (full) parquet the slim baked copy is derived from. See
+# scripts/sync_data.sh.
+data_full/

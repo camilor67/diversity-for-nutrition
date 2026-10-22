@@ -2,7 +2,9 @@ ARG BASE_IMAGE=315134288138.dkr.ecr.us-east-1.amazonaws.com/r-lambda-d4n-base:la
 FROM ${BASE_IMAGE}
 
 # Bake the D4N working set into the image (read-only) so reports don't download
-# D4N_maps.parquet (5.8 GB since the 2026-10 data) from S3 on every cold start. Only the files the
+# D4N_maps.parquet from S3 on every cold start. The baked parquet is the slim
+# copy scripts/slim_parquet.R derives (0.93 GB instead of the delivered 5.8 GB
+# for the 2026-10 data; same answers). Only the files the
 # runtime actually reads are baked — NOT Maps/ (29 GiB of rasters that
 # load_maps.r no longer uses). Data is NOT versioned in git: S3 is the source of
 # truth, run scripts/sync_data.sh to populate baked_data/ before building.

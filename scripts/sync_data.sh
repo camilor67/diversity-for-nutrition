@@ -27,12 +27,22 @@
 #
 # Skipping step 4 after step 2 is safe: init_cache() detects the version
 # mismatch, disables the baked directory and falls back to S3.
+#
+# D4N_maps.parquet is NOT baked as delivered: scripts/slim_parquet.R derives a
+# slim copy (only the present_now == 1 rows plus one marker row per cell
+# without them, ~0.9 GB instead of 5.8 GB) and scripts/check_slim_parquet.R
+# proves it answers every runtime query like the full file. The full file is
+# kept outside baked_data/ (FULL_DIR) so it never reaches the image, and S3
+# keeps the delivered file untouched. If the baked data goes stale the runtime
+# reads the full file from S3, which gives the same reports.
+# Needs R with the duckdb package; SKIP_SLIM_CHECK=1 skips the proof (~15 min on 14 cores).
 set -euo pipefail
 
 BUCKET="${BUCKET:-d4n-data}"
 ROOT="${ROOT:-D4N_data}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$REPO_DIR/baked_data/$ROOT"
+FULL_DIR="${FULL_DIR:-$REPO_DIR/data_full/$ROOT}"
 
 # Directory-level prefixes only, never individual files: the baked branch of
 # download_from_s3() returns a .shp path directly without fetching its
@@ -43,7 +53,6 @@ PREFIXES=(
   "world_shp"
 )
 FILES=(
-  "D4N_maps.parquet"
   "cache_version.txt"
 )
 
@@ -70,6 +79,32 @@ for f in "${FILES[@]}"; do
   echo ">>> Copying $ROOT/$f"
   aws s3 cp "s3://$BUCKET/$ROOT/$f" "$DEST/$f" --quiet
 done
+
+# The delivered parquet, outside baked_data/ (sync skips it when unchanged).
+echo ">>> Syncing the full $ROOT/D4N_maps.parquet into $FULL_DIR"
+mkdir -p "$FULL_DIR"
+aws s3 sync "s3://$BUCKET/$ROOT" "$FULL_DIR" --exclude '*' --include 'D4N_maps.parquet' \
+  --exact-timestamps
+
+echo ">>> Deriving the slim D4N_maps.parquet"
+# Without a parquet in baked_data/ the runtime reads the full one from S3 (slow
+# but correct); a half-written or unchecked .tmp must never be baked.
+rm -f "$DEST/D4N_maps.parquet"
+trap 'rm -f "$DEST/D4N_maps.parquet.tmp"' EXIT
+Rscript "$REPO_DIR/scripts/slim_parquet.R" "$FULL_DIR/D4N_maps.parquet" "$DEST/D4N_maps.parquet.tmp"
+if [ "${SKIP_SLIM_CHECK:-0}" != "1" ]; then
+  echo ">>> Checking the slim parquet against the full one"
+  Rscript "$REPO_DIR/scripts/check_slim_parquet.R" "$FULL_DIR/D4N_maps.parquet" "$DEST/D4N_maps.parquet.tmp"
+fi
+mv "$DEST/D4N_maps.parquet.tmp" "$DEST/D4N_maps.parquet"
+
+# Provenance of the derived file (not read by the runtime).
+{
+  echo "D4N_maps.parquet here is derived by scripts/slim_parquet.R (repo HEAD $(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown))"
+  echo "from s3://$BUCKET/$ROOT/D4N_maps.parquet:"
+  aws s3api head-object --bucket "$BUCKET" --key "$ROOT/D4N_maps.parquet" \
+    --query '{size: ContentLength, etag: ETag, last_modified: LastModified}' --output json
+} > "$DEST/D4N_maps.parquet.source.txt"
 
 # A shapefile is useless without its companions.
 missing=0
