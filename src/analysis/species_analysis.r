@@ -35,14 +35,23 @@ extract_suitable_species_parquet <- function(lon, lat, within_range, SSP) {
   }
   result <- query_cell(cell_lon, cell_lat)
 
-  # no data in that cell (e.g. coast or lake): use the nearest cell with data (slow)
+  # no data in that cell (e.g. coast or lake): use the nearest cell with data.
+  # Search a growing window around the point: scanning the whole parquet takes
+  # over 15 min on Lambda, a window only reads the row groups it overlaps.
+  # A cell found within `win` degrees is the true nearest (anything outside the
+  # window is farther away); otherwise widen the window.
   if (nrow(result) == 0) {
-    closest <- dbGetQuery(con, sprintf("
-      SELECT lon, lat
-      FROM read_parquet('%s')
-      ORDER BY ((lon - %f)^2 + (lat - %f)^2)
-      LIMIT 1
-    ", parquet_path, lon, lat))
+    for (win in c(0.5, 2, 8, 180)) {
+      closest <- dbGetQuery(con, sprintf("
+        SELECT lon, lat
+        FROM read_parquet('%s')
+        WHERE lon BETWEEN %f AND %f
+          AND lat BETWEEN %f AND %f
+        ORDER BY ((lon - %f)^2 + (lat - %f)^2)
+        LIMIT 1
+      ", parquet_path, lon - win, lon + win, lat - win, lat + win, lon, lat))
+      if (nrow(closest) > 0 && sqrt((closest$lon - lon)^2 + (closest$lat - lat)^2) <= win) break
+    }
     result <- query_cell(closest$lon, closest$lat)
   }
 
