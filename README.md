@@ -64,6 +64,9 @@ tools/
   build_species_index.py # Species index for the front-end's match preview
 scripts/
   backfill_executions.R  # One-off backfill of analytics logs
+  sync_data.sh           # Sync the working set from S3 into baked_data/ for the image
+  slim_parquet.R         # Derive the slim D4N_maps.parquet baked into the image
+  check_slim_parquet.R   # Prove the slim parquet answers like the full one
 ```
 
 ## Data
@@ -97,6 +100,8 @@ These scripts in the project root prepare the data and are not part of the tool 
 - `food groups based on use descriptions.R` — assigns food groups from use descriptions (pre-processing of the species list).
 
 After updating any data file, upload it to S3 and change `cache_version.txt`.
+
+The Lambda image does not bake `D4N_maps.parquet` as delivered. `scripts/sync_data.sh` derives a slim copy with `scripts/slim_parquet.R`: every `present_now == 1` row, plus one marker row for each grid cell that has none (so the cell still counts as having data for the nearest-cell fallback), in the original order, ZSTD-compressed in larger row groups. The runtime query and its answer are unchanged; `scripts/check_slim_parquet.R` proves it cell by cell. For the 2026-10 data that is 0.93 GB instead of 5.8 GB, and a cell query reads much less. The delivered file in S3 is never replaced, and a stale image falls back to it.
 
 ## Local development
 
