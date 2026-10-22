@@ -223,6 +223,7 @@ build_references <- function(nutr_table) {
   # get each row's references: FPI-based edible parts only cite FPI, others are split per line
   row_refs <- lapply(seq_len(nrow(nutr_table)), function(i) {
     pp_ref <- nutr_table$plant_part_ref[i]
+    if (is.na(pp_ref)) pp_ref <- ""  # a missing reference cites nothing (instead of failing the report)
     if (startsWith(pp_ref, "FPI ref:") || pp_ref == "FPI use description") {
       r <- fpi_ref
     } else {

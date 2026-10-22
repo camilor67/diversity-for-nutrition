@@ -28,7 +28,8 @@ generate_report_data <- function(inputs,
   if (nrow(species_df) > 0) {
     no_fut <- is.na(species_df$future_suitability)
     species_df$future_suitability <- as.character(species_df$future_suitability)
-    species_df$future_suitability[no_fut] <- labels$no_future_projections
+    no_fut_label <- if (is.null(labels$no_future_projections)) NA else labels$no_future_projections
+    species_df$future_suitability[no_fut] <- no_fut_label
   }
 
   # Assemble the payload: echoes the inputs, adds derived context, ships the results.
@@ -50,7 +51,7 @@ generate_report_data <- function(inputs,
     ),
     n_species = nrow(species_df),
     species = if (nrow(species_df) > 0) species_df else NULL,
-    references = if (nrow(species_filt$references) > 0) species_filt$references else NULL,
+    references = if (!is.null(species_filt$references) && nrow(species_filt$references) > 0) species_filt$references else NULL,
     labels = labels
   )
 
