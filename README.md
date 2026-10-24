@@ -61,7 +61,8 @@ src/
     report_data.r        # Build data.json / data.js
 tools/
   local_viewer.html      # Dev-only viewer for local runs
-  build_species_index.py # Species index for the front-end's match preview
+  build_species_index.py # Species index + presence tiles for the front-end's species-count preview
+  check_presence_tiles.py # Proves the tiles answer like the Lambda's cell query
 scripts/
   backfill_executions.R  # One-off backfill of analytics logs
   sync_data.sh           # Sync the working set from S3 into baked_data/ for the image
@@ -102,6 +103,25 @@ These scripts in the project root prepare the data and are not part of the tool 
 After updating any data file, upload it to S3 and change `cache_version.txt`.
 
 The Lambda image does not bake `D4N_maps.parquet` as delivered. `scripts/sync_data.sh` derives a slim copy with `scripts/slim_parquet.R`: every `present_now == 1` row, plus one marker row for each grid cell that has none (so the cell still counts as having data for the nearest-cell fallback), in the original order, ZSTD-compressed in larger row groups. The runtime query and its answer are unchanged; `scripts/check_slim_parquet.R` proves it cell by cell. For the 2026-10 data that is 0.93 GB instead of 5.8 GB, and a cell query reads much less. The delivered file in S3 is never replaced, and a stale image falls back to it.
+
+## Front-end preview data
+
+The WordPress form counts, before a report is run, how many species the report would keep. `tools/build_species_index.py` builds what it needs from the same dataset the Lambda reads:
+
+- `D4N_species_index.json` — one row per species × edible part × food group, with the filter IDs, the tentative flag and the species' soil extreme categories (`o`; the soil filter is per species, not per site).
+- presence tiles (with `--parquet` and `--tiles-out`) — for every 2.5' grid cell, the index species with `present_now == 1`, and those also `within_hull`, as two bitsets per cell, packed in 0.5° tiles. The binary format is documented at the top of the script.
+
+```bash
+python3 tools/build_species_index.py --src baked_data/D4N_data_2026-10/Tables \
+  --index-file /tmp/d4n/D4N_species_index.json \
+  --parquet baked_data/D4N_data_2026-10/D4N_maps.parquet --tiles-out /tmp/d4n/presence
+python3 tools/check_presence_tiles.py --src baked_data/D4N_data_2026-10/Tables \
+  --parquet baked_data/D4N_data_2026-10/D4N_maps.parquet \
+  --index /tmp/d4n/D4N_species_index.json --tiles /tmp/d4n/presence/<version>
+aws s3 sync /tmp/d4n/presence/<version> s3://d4n-data/tool-maps/d4n/presence/<version>/
+```
+
+The tile folder is named after the index `version` (`:` replaced by `-`), so an index and its tiles always ship together; the theme copies the index into the plugin and points its config at that folder. Rebuild both whenever the tables or the parquet change. Needs Python with `duckdb` and `numpy`.
 
 ## Local development
 
