@@ -5,7 +5,7 @@ source("functions.R")
 # test values
 lon = -49.91
 lat = -26.34
-edible_parts_ID = "7,8"
+edible_parts_ID = "5,8"
 food_groups_ID = "3,15"
 growth_forms_ID = "1"
 species_type_ID = "1"
