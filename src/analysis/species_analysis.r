@@ -201,6 +201,7 @@ filter_species <- function(nutr_dat,
 
   # select only relevant columns for report
   nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability", "plant_part_ref", "use_ref")]
+  nutr_table <- unique(nutr_table)
   nutr_table <- nutr_table[order(nutr_table$family, nutr_table$species), ]
 
   # return of the function
