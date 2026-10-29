@@ -1,6 +1,6 @@
 # load data
 setwd(dir = "C:/Users/tobia/Dropbox/Diversity for Nutrition/diversity-for-nutrition-data/D4N_data/Tables")
-df <- read.csv("D4N_species_nutrition_data.csv", colClasses = "character", check.names = FALSE, na.strings = character(0))
+df <- read.csv("D4N_species_nutrition_data_latest.csv", colClasses = "character", check.names = FALSE, na.strings = character(0))
 
 # fix encoding: cells that are not valid UTF-8 were saved as Windows-1252
 # (only the invalid bytes are converted, since some cells mix UTF-8 and Windows-1252)
@@ -21,6 +21,9 @@ for (k in seq_along(df)) {
 
 # trim leading/trailing spaces in all columns
 df[] <- lapply(df, trimws)
+
+# references: restore the "//" missing after "http:" / "https:"
+df$plant_part_ref <- gsub("(https?:)(?!//)", "\\1//", df$plant_part_ref, perl = TRUE)
 
 # food groups: match labels in D4N_food_groups.csv
 fix_food_group <- c(
@@ -49,7 +52,10 @@ fix_plant_part <- c(
   "Leaves"       = "leaves",
   "Latex"        = "exudates",
   "mucilages"    = "exudates",
-  "Flower buds"  = "inflorescences"
+  "Flower buds"     = "flowers",
+  "infructescences" = "fruits",
+  "inflorescences"  = "flowers",
+  "Inflorescences"  = "flowers"
 )
 m <- df$plant_part %in% names(fix_plant_part)
 df$plant_part[m] <- fix_plant_part[df$plant_part[m]]
