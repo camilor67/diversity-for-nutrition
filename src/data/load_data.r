@@ -12,9 +12,8 @@ load_data <- function(DATA_FOLDER,
   nutr_dat <- safe_read_csv(file.path(DATA_FOLDER, "Tables", "D4N_species_nutrition_data.csv"))
 
   # get the species for which models were made
-  j <- which(nutr_dat$SDM == 1)
-  species_set <- nutr_dat$species[j]
-  species_set <- species_set[-which(duplicated(species_set))]
+  j <- which(nutr_dat$incl_SDM == 1)
+  species_set <- unique(nutr_dat$species[j])
   
   # load edible parts table
   edible_parts <- safe_read_csv(file.path(DATA_FOLDER, "Tables", "D4N_plant_parts.csv"))
