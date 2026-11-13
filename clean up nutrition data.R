@@ -38,10 +38,19 @@ fix_food_group <- c(
 m <- df$food_group %in% names(fix_food_group)
 df$food_group[m] <- fix_food_group[df$food_group[m]]
 
+# food groups still under review by the curators (2026-11: 32 rows, 23 of them
+# Inga, where the edible part is the aril/pod pulp): keep the likely group,
+# flagged as tentative, so a report never prints the curators' note and
+# "exclude tentative" drops them
+m <- df$food_group == "A checkear (dessert fruits?)"
+df$food_group[m] <- "dessert fruits"
+df$food_group_tentative[m] <- "1"
+
 # plant parts: match labels in D4N_plant_parts.csv
 fix_plant_part <- c(
-  "roots/tubers" = "roots",
-  "Roots"        = "roots",
+  # 2026-11: the option is labelled "roots/tubers" (Evert), in D4N_plant_parts.csv too
+  "roots"        = "roots/tubers",
+  "Roots"        = "roots/tubers",
   "nuts/seeds"   = "seeds",
   "seed"         = "seeds",
   "Seeds"        = "seeds",
@@ -74,7 +83,8 @@ lookups <- list(
   wild_or_cultivated = read.csv("D4N_species_types.csv")$species_type
 )
 placeholders <- c("Not available plant part", "No food group available",
-                  "Unclear plant part/food group reported in edible portion")
+                  "Unclear plant part/food group reported in edible portion",
+                  "Plant part unavailable/unclear", "Food group unavailable/unclear")
 for (col in names(lookups)) {
   left <- df[[col]][!df[[col]] %in% c(lookups[[col]], placeholders)]
   cat("\n", col, ": ", length(left), " rows still not matching\n", sep = "")
