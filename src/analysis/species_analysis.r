@@ -208,8 +208,14 @@ filter_species <- function(nutr_dat,
   # future suitability: % of the 5 models predicting future presence
   nutr_dat$future_suitability <- round(unname(n_models[nutr_dat$species]) / 5 * 100)
 
+  # the curators' "use with caution" flag (cautionary_use = "1"), as a logical so
+  # the report can mark the row; any other value (empty, a stray space) is FALSE.
+  # A table without the column (older deliveries) flags nothing.
+  caution_col <- if ("cautionary_use" %in% names(nutr_dat)) nutr_dat$cautionary_use else rep("", nrow(nutr_dat))
+  nutr_dat$caution <- !is.na(caution_col) & trimws(caution_col) == "1"
+
   # select only relevant columns for report
-  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability", "plant_part_ref", "use_ref")]
+  nutr_table <- nutr_dat[, c("species", "family", "growth_form", "wild_or_cultivated", "plant_part", "food_group", "use", "future_suitability", "plant_part_ref", "use_ref", "caution")]
   nutr_table <- unique(nutr_table)
   nutr_table <- nutr_table[order(nutr_table$family, nutr_table$species), ]
 
