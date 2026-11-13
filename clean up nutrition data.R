@@ -19,6 +19,49 @@ for (k in seq_along(df)) {
   df[[k]][bad] <- fix_bytes(df[[k]][bad])
 }
 
+# fix text that is valid UTF-8 but was decoded as Windows-1252 once and saved
+# again ("Plantas Ãštiles", "CatÃ³lica": 4 827 rows in the 2026-11 delivery,
+# 218 in 2026-10). Each run of characters that spells one UTF-8 sequence in
+# Windows-1252 (a lead byte C2-F4, then its continuation bytes 80-BF) is turned
+# back into those bytes and kept only if they decode as valid UTF-8, so real
+# text like "SÃO PAULO" (C3 followed by "O", not a continuation) is untouched.
+# Bytes 81, 8D, 8F, 90 and 9D are undefined in Windows-1252 and arrive as the
+# Latin-1 control characters, which is why both encodings are tried per char.
+cont <- paste0("[\\x{0080}-\\x{00BF}\\x{20AC}\\x{201A}\\x{0192}\\x{201E}\\x{2026}",
+               "\\x{2020}\\x{2021}\\x{02C6}\\x{2030}\\x{0160}\\x{2039}\\x{0152}",
+               "\\x{017D}\\x{2018}\\x{2019}\\x{201C}\\x{201D}\\x{2022}\\x{2013}",
+               "\\x{2014}\\x{02DC}\\x{2122}\\x{0161}\\x{203A}\\x{0153}\\x{017E}\\x{0178}]")
+mojibake <- paste0("(*UTF)(?:[\\x{00C2}-\\x{00DF}]", cont, "|[\\x{00E0}-\\x{00EF}]", cont, "{2}",
+                   "|[\\x{00F0}-\\x{00F4}]", cont, "{3})")
+unmojibake <- function(run) {
+  chars <- strsplit(run, "")[[1]]
+  bytes <- lapply(chars, function(ch) {
+    b <- iconv(ch, "UTF-8", "windows-1252", toRaw = TRUE)[[1]]
+    if (is.null(b)) b <- iconv(ch, "UTF-8", "latin1", toRaw = TRUE)[[1]]
+    b
+  })
+  if (any(vapply(bytes, is.null, logical(1)))) return(run)
+  out <- rawToChar(do.call(c, bytes))
+  Encoding(out) <- "UTF-8"
+  if (validUTF8(out)) out else run
+}
+fix_mojibake <- function(x) {
+  Encoding(x) <- "UTF-8"  # every cell is valid UTF-8 after fix_bytes()
+  for (pass in 1:3) {  # text saved wrongly twice needs two passes
+    hit <- grepl(mojibake, x, perl = TRUE)
+    if (!any(hit)) break
+    before <- x[hit]
+    m <- gregexpr(mojibake, before, perl = TRUE)
+    runs <- regmatches(before, m)
+    after <- before
+    regmatches(after, m) <- lapply(runs, function(r) vapply(r, unmojibake, character(1), USE.NAMES = FALSE))
+    if (identical(after, before)) break
+    x[hit] <- after
+  }
+  x
+}
+df[] <- lapply(df, fix_mojibake)
+
 # trim leading/trailing spaces in all columns
 df[] <- lapply(df, trimws)
 
